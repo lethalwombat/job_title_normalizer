@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  mercury_dev:
+  job_title_normalizer:
     image: job_title_normalizer:latest
     build:
       context: .
