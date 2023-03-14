@@ -3,7 +3,7 @@
 
 # Import libraries
 
-# In[1]:
+# In[ ]:
 
 
 import pandas as pd
@@ -11,7 +11,7 @@ import pandas as pd
 
 # Import data
 
-# In[2]:
+# In[ ]:
 
 
 # job titles from rocket
@@ -51,7 +51,7 @@ df_assigned_roles = (
 
 # Find out exact matches
 
-# In[3]:
+# In[ ]:
 
 
 # first merge
@@ -85,7 +85,58 @@ print('Unmatched: {}'.format(df_exact_non_matches.shape[0]))
 # In[ ]:
 
 
-get_ipython().run_cell_magic('time', '', "from rapidfuzz import process\nfrom pandarallel import pandarallel\npandarallel.initialize(progress_bar=True, nb_workers=4)\n\ndef match_job_titles(df, dictionary=None, score_cutoff=90):\n    # nothing to look up\n    if dictionary is None:\n        print('No dictionary set!')\n        return df\n    \n    # get roles to look up \n    _roles = dictionary['job_title_raw'].unique()\n\n    # matching function\n    _match_func = lambda x : process.extractOne(x, _roles)\n\n    # apply matching function\n    df = (\n        df\n        .assign(\n            _match=df['job_title_raw'].parallel_apply(_match_func)\n        )\n    )\n    # filter out bad quality matches\n    df = (\n        df\n        .assign(\n            job_title_matched=df['_match'].apply(lambda x : x[0]),            \n            _score=df['_match'].apply(lambda x : x[1]),\n        )\n        .query('_score >= @score_cutoff')\n        .drop(columns=['_match', '_score'])\n        .reset_index(drop=True)\n    )\n    return df\n\n# apply fuzzy matching and match back to the dictionary\ndf_fuzzy_matches = (\n    df_exact_non_matches\n#     .head(10000) # testing purposes\n    .pipe(match_job_titles, df_assigned_roles)\n    [['job_title_matched', 'n']]\n    .merge(df_assigned_roles, how='left', left_on='job_title_matched', right_on='job_title_raw')\n    .drop(columns=['job_title_matched'])\n    [['job_title_raw', 'n', 'job_title']]    \n)\n\n# display stats\nprint('Total records: {}'.format(df_test_data.shape[0]))\nprint('Exact matches: {}'.format(df_exact_matches.shape[0]))\nprint('Fuzzy matches: {}'.format(df_fuzzy_matches.shape[0]))\n")
+# %%time
+from rapidfuzz import process
+from pandarallel import pandarallel
+pandarallel.initialize(progress_bar=True, nb_workers=4)
+
+def match_job_titles(df, dictionary=None, score_cutoff=90):
+    # nothing to look up
+    if dictionary is None:
+        print('No dictionary set!')
+        return df
+    
+    # get roles to look up 
+    _roles = dictionary['job_title_raw'].unique()
+
+    # matching function
+    _match_func = lambda x : process.extractOne(x, _roles)
+
+    # apply matching function
+    df = (
+        df
+        .assign(
+            _match=df['job_title_raw'].parallel_apply(_match_func)
+        )
+    )
+    # filter out bad quality matches
+    df = (
+        df
+        .assign(
+            job_title_matched=df['_match'].apply(lambda x : x[0]),            
+            _score=df['_match'].apply(lambda x : x[1]),
+        )
+        .query('_score >= @score_cutoff')
+        .drop(columns=['_match', '_score'])
+        .reset_index(drop=True)
+    )
+    return df
+
+# apply fuzzy matching and match back to the dictionary
+df_fuzzy_matches = (
+    df_exact_non_matches
+#     .head(10000) # testing purposes
+    .pipe(match_job_titles, df_assigned_roles)
+    [['job_title_matched', 'n']]
+    .merge(df_assigned_roles, how='left', left_on='job_title_matched', right_on='job_title_raw')
+    .drop(columns=['job_title_matched'])
+    [['job_title_raw', 'n', 'job_title']]    
+)
+
+# display stats
+print('Total records: {}'.format(df_test_data.shape[0]))
+print('Exact matches: {}'.format(df_exact_matches.shape[0]))
+print('Fuzzy matches: {}'.format(df_fuzzy_matches.shape[0]))
 
 
 # Combine results
